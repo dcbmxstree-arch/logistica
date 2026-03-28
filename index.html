@@ -264,8 +264,13 @@ async function optimizeWithIA() {
 
 function openGmaps() {
     const base = document.getElementById('cfg-base').value;
+    // Usamos el formato oficial de Google Maps para múltiples paradas
     const waypoints = orderedStops.map(s => `${s.lat},${s.lng}`).join('|');
-    window.open(`http://googleusercontent.com/maps.google.com/9{base}&destination=${base}&waypoints=${waypoints}&travelmode=driving`, '_blank');
+    
+    // URL Corregida y Limpia
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${base}&destination=${base}&waypoints=${waypoints}&travelmode=driving`;
+    
+    window.open(url, '_blank');
 }
 
 function switchTab(t) {
