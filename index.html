@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LogísticaEC - Optimizador Pro</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --brand-primary: #1a3a5c;
+    --brand-accent: #e8a020;
+    --r: #e74c3c;
+    --s: #27ae60;
+    --font-main: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-main); background: #f0f4f8; color: #1a2332; min-height: 100vh; overflow: hidden; }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    background: var(--brand-primary);
+    color: white;
+    padding: 0 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    z-index: 1001;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-text { font-size: 16px; font-weight: 700; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 320px;
+    background: white;
+    border-right: 1px solid #dde4ec;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+  }
+
+  .tabs { display: flex; border-bottom: 1px solid #dde4ec; background: #fafbfc; }
+  .tab { flex: 1; padding: 12px 4px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: #6b7a8d; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--brand-primary); border-bottom-color: var(--brand-primary); background: white; }
+
+  .tab-panel { display: none; flex: 1; overflow-y: auto; padding: 15px; flex-direction: column; gap: 12px; }
+  .tab-panel.active { display: flex; }
+
+  .btn {
+    width: 100%; padding: 10px; border: none; border-radius: 7px;
+    font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-p { background: var(--brand-primary); color: white; }
+  .btn-s { background: var(--s); color: white; }
+  .btn-g { background: #4285F4; color: white; }
+  .btn-o { border: 1px solid #ddd; background: white; color: #666; }
+
+  .metric-card { background: #f8fafc; border: 1px solid #dde4ec; border-radius: 8px; padding: 12px; text-align: center; }
+  .val { font-size: 20px; font-weight: 700; color: var(--brand-primary); }
+
+  .stop-item { background: #f8fafc; border: 1px solid #eee; padding: 8px; border-radius: 6px; font-size: 11px; display: flex; align-items: center; gap: 8px; }
+  .stop-num { width: 18px; height: 18px; border-radius: 50%; background: var(--brand-primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+
+  .map-container { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; }
+
+  .legend { position: absolute; bottom: 20px; right: 20px; background: white; padding: 10px; border-radius: 8px; font-size: 11px; z-index: 1002; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  
+  .spinner { width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="logo">
+      <div style="background:var(--brand-accent); padding:4px; border-radius:4px;">🚚</div>
+      <div class="logo-text">LogísticaEC <small style="font-weight:400; opacity:0.7;">| Enterprise</small></div>
+    </div>
+    <div id="top-status" style="font-size: 11px; opacity:0.8;">Quito & Valles</div>
+  </header>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('carga')">CARGA</div>
+        <div class="tab" onclick="switchTab('paradas')">PARADAS</div>
+        <div class="tab" onclick="switchTab('analytics')">AHORRO</div>
+        <div class="tab" onclick="switchTab('config')">CONFIG</div>
+      </div>
+
+      <div id="tab-carga" class="tab-panel active">
+        <div style="border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('fileInput').click()">
+          <span style="font-size: 24px;">📂</span>
+          <p style="font-size: 12px; margin-top: 5px;">Subir Excel de Entregas</p>
+          <input type="file" id="fileInput" hidden accept=".xlsx,.xls,.csv">
+        </div>
+        <button class="btn btn-p" onclick="generateDemo()">🎲 Generar 10 Pedidos (Quito/Valles)</button>
+        <div id="loader-manual" style="display:none; font-size:11px; color:var(--r); text-align:center;">
+          <span class="spinner" style="border-top-color:var(--r); display:inline-block;"></span> Trazando ruta actual...
+        </div>
+        <div id="actions-box" style="display:none; flex-direction:column; gap:8px;">
+            <button class="btn btn-s" id="btnOptimize" onclick="optimizeWithIA()">⚡ Optimizar Ruta con IA</button>
+            <button class="btn btn-o" onclick="location.reload()">🗑 Limpiar Todo</button>
+        </div>
+      </div>
+
+      <div id="tab-paradas" class="tab-panel">
+        <div id="stop-list-container">
+          <p style="font-size: 11px; color:#999; text-align:center;">No hay paradas cargadas.</p>
+        </div>
+      </div>
+
+      <div id="tab-analytics" class="tab-panel">
+        <div id="no-ana" style="text-align:center; color:#999; font-size:12px; margin-top:20px;">Optimiza la ruta para ver resultados.</div>
+        <div id="ana-content" style="display:none; flex-direction:column; gap:10px;">
+            <div class="metric-card" style="border-left: 4px solid var(--r);">
+                <div style="font-size:10px; color:#666;">RUTA ACTUAL (INEFICIENTE)</div>
+                <div class="val" id="val-m" style="color:var(--r);">0 km</div>
+            </div>
+            <div class="metric-card" style="border-left: 4px solid var(--s);">
+                <div style="font-size:10px; color:#666;">RUTA LOGÍSTICA EC</div>
+                <div class="val" id="val-o" style="color:var(--s);">0 km</div>
+            </div>
+            <div class="metric-card" style="background:#eefdf3;">
+                <div style="font-size:10px; color:#666;">AHORRO ECONÓMICO</div>
+                <div class="val" id="val-usd" style="color:var(--s);">$0.00</div>
+            </div>
+            <button class="btn btn-g" id="btnGmaps" onclick="openGmaps()">🗺️ Abrir en Google Maps (GPS)</button>
+        </div>
+      </div>
+
+      <div id="tab-config" class="tab-panel">
+        <label style="font-size:11px; font-weight:700;">Costo por Km (USD)</label>
+        <input type="number" id="cfg-cost" value="0.15" step="0.01" style="padding:8px; border:1px solid #ddd; border-radius:5px;">
+        <label style="font-size:11px; font-weight:700; margin-top:10px;">Coordenadas Base</label>
+        <input type="text" id="cfg-base" value="-0.1835, -78.4814" style="padding:8px; border:1px solid #ddd; border-radius:5px;">
+        <p style="font-size:10px; color:#666;">Ubicación actual: La Carolina, Quito.</p>
+      </div>
+    </div>
+
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="legend">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <div style="width:20px; height:3px; background:var(--r); opacity:0.5; border-top:2px dashed #fff;"></div><span>Ruta Actual</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:20px; height:3px; background:var(--s);"></div><span>Ruta IA Pro</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let map, markers = [], stops = [], orderedStops = [], polyManual, polyOpt;
+
+function initMap() {
+    map = L.map('map', {zoomControl: false}).setView([-0.1835, -78.4814], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.control.zoom({position: 'bottomright'}).addTo(map);
+    L.marker([-0.1835, -78.4814], {icon: L.divIcon({html:'🏠', className:''})}).addTo(map);
+}
+
+async function getRoute(points) {
+    const coords = points.map(p => `${p[1]},${p[0]}`).join(';');
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+    return await res.json();
+}
+
+async function generateDemo() {
+    const zonas = [
+        {n:"Norte", lat:[-0.14,-0.11], lng:[-78.49,-78.46]},
+        {n:"Centro", lat:[-0.20,-0.18], lng:[-78.50,-78.48]},
+        {n:"Cumbayá", lat:[-0.22,-0.19], lng:[-78.43,-78.40]},
+        {n:"Tumbaco", lat:[-0.23,-0.20], lng:[-78.40,-78.36]},
+        {n:"Sur", lat:[-0.30,-0.26], lng:[-78.55,-78.52]}
+    ];
+    
+    stops = [];
+    resetAll();
+    const base = document.getElementById('cfg-base').value.split(',').map(Number);
+    
+    document.getElementById('loader-manual').style.display = 'block';
+
+    for(let i=1; i<=10; i++) {
+        const z = zonas[Math.floor(Math.random()*zonas.length)];
+        stops.push({
+            id: `P-${100+i}`,
+            ref: `Entrega ${z.n} #${i}`,
+            lat: (Math.random()*(z.lat[1]-z.lat[0])+z.lat[0]).toFixed(5),
+            lng: (Math.random()*(z.lng[1]-z.lng[0])+z.lng[0]).toFixed(5)
+        });
+    }
+
+    // Dibujar Ruta Manual por Calles (Orden de entrada)
+    const mCoords = [base, ...stops.map(s => [s.lat, s.lng]), base];
+    const dManual = await getRoute(mCoords);
+    polyManual = L.geoJSON(dManual.routes[0].geometry, {style: {color: 'var(--r)', weight: 3, opacity: 0.5, dashArray: '5,10'}}).addTo(map);
+    
+    document.getElementById('val-m').innerText = (dManual.routes[0].distance/1000).toFixed(1) + " km";
+    
+    // Lista de paradas
+    let listHtml = "";
+    stops.forEach((s, i) => {
+        markers.push(L.marker([s.lat, s.lng]).addTo(map));
+        listHtml += `<div class="stop-item"><div class="stop-num">${i+1}</div><span>${s.ref}</span></div>`;
+    });
+    document.getElementById('stop-list-container').innerHTML = listHtml;
+
+    document.getElementById('loader-manual').style.display = 'none';
+    document.getElementById('actions-box').style.display = 'flex';
+    map.fitBounds(polyManual.getBounds(), {padding:[30,30]});
+}
+
+async function optimizeWithIA() {
+    const btn = document.getElementById('btnOptimize');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Procesando...';
+
+    const base = document.getElementById('cfg-base').value.split(',').map(Number);
+    let pool = [...stops];
+    let current = base;
+    let ordered = [base];
+    orderedStops = [];
+
+    // Algoritmo Vecino Cercano
+    while(pool.length > 0) {
+        pool.sort((a,b) => Math.hypot(a.lat-current[0], a.lng-current[1]) - Math.hypot(b.lat-current[0], b.lng-current[1]));
+        const next = pool.shift();
+        current = [parseFloat(next.lat), parseFloat(next.lng)];
+        ordered.push(current);
+        orderedStops.push(next);
+    }
+    ordered.push(base);
+
+    const dOpt = await getRoute(ordered);
+    if(polyOpt) map.removeLayer(polyOpt);
+    polyOpt = L.geoJSON(dOpt.routes[0].geometry, {style: {color: 'var(--s)', weight: 5, opacity: 0.8}}).addTo(map);
+
+    const distM = parseFloat(document.getElementById('val-m').innerText);
+    const distO = dOpt.routes[0].distance/1000;
+    const cost = parseFloat(document.getElementById('cfg-cost').value);
+
+    document.getElementById('val-o').innerText = distO.toFixed(1) + " km";
+    document.getElementById('val-usd').innerText = "$" + ((distM - distO)*cost).toFixed(2);
+    
+    document.getElementById('no-ana').style.display = 'none';
+    document.getElementById('ana-content').style.display = 'flex';
+    
+    btn.disabled = false;
+    btn.innerHTML = '⚡ Optimizar Ruta con IA';
+    switchTab('analytics');
+}
+
+function openGmaps() {
+    const base = document.getElementById('cfg-base').value;
+    const waypoints = orderedStops.map(s => `${s.lat},${s.lng}`).join('|');
+    window.open(`http://googleusercontent.com/maps.google.com/9{base}&destination=${base}&waypoints=${waypoints}&travelmode=driving`, '_blank');
+}
+
+function switchTab(t) {
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab[onclick="switchTab('${t}')"]`).classList.add('active');
+    document.getElementById('tab-' + t).classList.add('active');
+}
+
+function resetAll() {
+    markers.forEach(m => map.removeLayer(m));
+    if(polyManual) map.removeLayer(polyManual);
+    if(polyOpt) map.removeLayer(polyOpt);
+    markers = [];
+}
+
+window.onload = initMap;
+</script>
+</body>
+</html>
